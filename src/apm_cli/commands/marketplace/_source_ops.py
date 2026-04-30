@@ -270,10 +270,13 @@ def do_add_sources(
         else:
             failures.append(r)
 
-    click.echo(
-        f"Summary: {len(successes)} registered, {len(failures)} failed.",
-        err=True,
-    )
+    if failures:
+        click.echo(
+            f"Summary: {len(successes)} registered, {len(failures)} failed.",
+            err=True,
+        )
+    else:
+        click.echo(f"Summary: {len(successes)} registered.", err=True)
     return 0 if not failures else 1
 
 
