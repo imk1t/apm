@@ -552,6 +552,16 @@ run_e2e_tests() {
         exit 1
     fi
 
+    log_info "Running marketplace upstream build integration tests..."
+    echo "Command: pytest tests/integration/marketplace/test_upstream_build_integration.py -v --tb=short"
+
+    if pytest tests/integration/marketplace/test_upstream_build_integration.py -v --tb=short; then
+        log_success "Marketplace upstream build integration tests passed!"
+    else
+        log_error "Marketplace upstream build integration tests failed!"
+        exit 1
+    fi
+
     log_success "All integration test suites completed successfully!"
     
 
