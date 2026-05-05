@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Marketplace upstreams: curated pass-through with allow-list governance.** New `apm marketplace upstream` CLI subgroup (`add`/`list`/`remove`) plus an `upstreams:` block in `apm.yml -> marketplace:` lets curators selectively re-expose plugins from external marketplaces (for example, public Claude Code marketplaces) under their own marketplace, with build-time commit pinning recorded in `apm.lock.yaml`. The emitted `marketplace.json` stays byte-for-byte Anthropic-conformant -- no `metadata.apm.*` keys are injected, so consumers see a vanilla plugin entry. Direct (`source:`) and upstream (`upstream:` + `plugin:`) `packages[]` shapes coexist in the same list and are mutually exclusive per entry. APM does NOT re-host upstream content -- consumer installs always fetch plugin source from the upstream git host; air-gapped re-hosting is reserved for a future `distribution: rehost` mode. See [Marketplace upstreams](docs/src/content/docs/guides/marketplace-upstreams.md). (#1136)
+- **Marketplace upstreams: curated pass-through with allow-list governance.** Selectively re-expose plugins from an external marketplace (for example, a public Claude Code marketplace) under your own marketplace, with build-time commit pinning baked into `apm.lock.yaml`.
+  - New `apm marketplace upstream` CLI subgroup: `add` / `list` / `remove`.
+  - New `upstreams:` block in `apm.yml -> marketplace:`; `packages[]` entries pick between the existing `source:` shape and the new `upstream:` + `plugin:` shape (mutually exclusive per entry).
+  - Emitted `marketplace.json` is byte-for-byte Anthropic-conformant -- **no `metadata.apm.*` keys are injected**, so consumers see a vanilla plugin entry.
+  - APM does **not** re-host upstream content. Consumer installs always fetch plugin source from the upstream git host; air-gapped re-hosting is reserved for a future `distribution: rehost` mode.
+  - See the [Marketplace upstreams guide](https://microsoft.github.io/apm/guides/marketplace-upstreams/). (#1136)
 
 ## [0.12.2] - 2026-05-05
 
