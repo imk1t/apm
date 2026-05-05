@@ -50,7 +50,7 @@ Commit this to the default branch of `your-org/.github`.
 
 ## Step 2: Add baseline CI checks
 
-Add `apm audit --ci` to your CI pipeline. This runs 6 lockfile consistency checks — no policy file needed:
+Add `apm audit --ci` to your CI pipeline. This runs 7 baseline lockfile checks plus integration drift detection — no policy file needed:
 
 ```yaml
 # .github/workflows/apm-policy.yml
@@ -80,7 +80,7 @@ jobs:
         run: apm audit --ci
 ```
 
-This catches lockfile/manifest drift, missing files, and hidden Unicode — without any policy configuration.
+This catches lockfile/manifest drift, missing files, hidden Unicode, and integration drift (forgot to re-run `apm install`, hand-edits to deployed files, orphaned files) — without any policy configuration. See the [Drift Detection guide](../drift-detection/) for details.
 
 ## Step 3: Enable policy enforcement
 
