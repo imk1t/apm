@@ -9,12 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Marketplace upstreams: curated pass-through with allow-list governance.** Selectively re-expose plugins from an external marketplace (for example, a public Claude Code marketplace) under your own marketplace, with build-time commit pinning baked into `apm.lock.yaml`.
-  - New `apm marketplace upstream` CLI subgroup: `add` / `list` / `remove`.
-  - New `upstreams:` block in `apm.yml -> marketplace:`; `packages[]` entries pick between the existing `source:` shape and the new `upstream:` + `plugin:` shape (mutually exclusive per entry).
-  - Emitted `marketplace.json` is byte-for-byte Anthropic-conformant -- **no `metadata.apm.*` keys are injected**, so consumers see a vanilla plugin entry.
-  - APM does **not** re-host upstream content. Consumer installs always fetch plugin source from the upstream git host; air-gapped re-hosting is reserved for a future `distribution: rehost` mode.
-  - See the [Marketplace upstreams guide](https://microsoft.github.io/apm/guides/marketplace-upstreams/). (#1136)
+- **Marketplace upstreams: curated pass-through with allow-list governance.** Selectively re-expose plugins from an external marketplace under your own, with build-time commit pinning in `apm.lock.yaml` and Anthropic-conformant emission (no `metadata.apm.*` keys injected). New `upstreams:` block in `apm.yml -> marketplace:`; new `apm marketplace upstream add/list/remove` CLI; `packages[]` entries pick between `source:` (direct) and `upstream:` + `plugin:` (pass-through). APM does **not** re-host content; consumer installs always fetch from the upstream git host. See the [Marketplace upstreams guide](https://microsoft.github.io/apm/guides/marketplace-upstreams/). (#1136)
 
 ## [0.12.2] - 2026-05-05
 
