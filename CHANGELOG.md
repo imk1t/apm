@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Integration tests now use marker-driven discovery instead of per-file enumeration in `scripts/test-integration.sh`.** Replaced 21 `pytestmark = pytest.mark.skipif(...)` chains across `tests/integration/` with declarative `requires_*` markers; the precondition logic lives once in `tests/integration/conftest.py` and auto-skips at collection time. Eliminates silent test loss when a new file is added but the bash script is not updated. PR1 of #1166. (#1170)
 - **`apm install` now honours `policy.fetch_failure_default: block` for `no_git_remote` / `absent` / `empty`** -- install-side parity with the audit fix above; default `warn` keeps fail-open. (#1159)
 
 ## [0.12.2] - 2026-05-05
