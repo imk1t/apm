@@ -5,28 +5,85 @@ with declarative markers that auto-skip when the required precondition is
 absent. Tests apply markers via module-level ``pytestmark`` or per-test
 decorators; the precondition logic lives here, exactly once.
 
+Also exposes the ``make_copilot_project`` helper (see #1154) for tests that
+need a copilot-target signal in their tmp_path scaffolding.
+
 See microsoft/apm#1166 for the design rationale.
 """
 
 from __future__ import annotations
 
 import os
+import platform as _platform
 import shutil
 import subprocess
 from collections.abc import Callable
+from functools import cache, lru_cache
 from pathlib import Path
 
 import pytest
 
+# ---------------------------------------------------------------------------
+# Binary path resolution (single source of truth for marker + fixture)
+# ---------------------------------------------------------------------------
 
+
+def _platform_binary_dir() -> str:
+    os_name = _platform.system().lower()
+    arch = _platform.machine().lower()
+    arch_map = {
+        "x86_64": "x86_64",
+        "amd64": "x86_64",
+        "arm64": "arm64",
+        "aarch64": "arm64",
+    }
+    return f"apm-{os_name}-{arch_map.get(arch, arch)}"
+
+
+def _resolve_apm_binary() -> Path | None:
+    """Return the resolved apm binary path, or None if not found.
+
+    Resolution order (single source of truth shared by the
+    ``requires_apm_binary`` marker check and the ``apm_binary_path``
+    fixture):
+
+      1. ``APM_BINARY_PATH`` env var (CI sets this after the build step).
+      2. ``shutil.which("apm")`` lookup on ``PATH``.
+      3. ``./dist/apm-<os>-<arch>/apm`` (local build convention).
+    """
+    env_path = os.environ.get("APM_BINARY_PATH")
+    if env_path:
+        candidate = Path(env_path)
+        if candidate.is_file():
+            return candidate.resolve()
+
+    on_path = shutil.which("apm")
+    if on_path:
+        return Path(on_path).resolve()
+
+    local_path = Path("dist") / _platform_binary_dir() / "apm"
+    if local_path.is_file():
+        return local_path.resolve()
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Marker precondition checks (memoized per session)
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
 def _has_github_token() -> bool:
     return bool(os.environ.get("GITHUB_APM_PAT") or os.environ.get("GITHUB_TOKEN"))
 
 
+@lru_cache(maxsize=1)
 def _has_ado_pat() -> bool:
     return bool(os.environ.get("ADO_APM_PAT"))
 
 
+@lru_cache(maxsize=1)
 def _has_ado_bearer() -> bool:
     if os.getenv("APM_TEST_ADO_BEARER") != "1":
         return False
@@ -56,24 +113,27 @@ def _has_ado_bearer() -> bool:
         return False
 
 
+@lru_cache(maxsize=1)
 def _is_e2e_mode() -> bool:
     return os.environ.get("APM_E2E_TESTS", "").lower() in ("1", "true", "yes")
 
 
+@lru_cache(maxsize=1)
 def _is_network_integration() -> bool:
     return os.environ.get("APM_RUN_INTEGRATION_TESTS") == "1"
 
 
+@lru_cache(maxsize=1)
 def _is_inference_mode() -> bool:
     return os.environ.get("APM_RUN_INFERENCE_TESTS") == "1"
 
 
+@lru_cache(maxsize=1)
 def _has_apm_binary() -> bool:
-    if os.environ.get("APM_BINARY_PATH"):
-        return Path(os.environ["APM_BINARY_PATH"]).is_file()
-    return shutil.which("apm") is not None
+    return _resolve_apm_binary() is not None
 
 
+@cache
 def _has_runtime(name: str) -> bool:
     if shutil.which(name):
         return True
@@ -98,7 +158,7 @@ _MARKER_CHECKS: dict[str, tuple[Callable[[], bool], str]] = {
     ),
     "requires_apm_binary": (
         _has_apm_binary,
-        "apm binary not found on PATH (set APM_BINARY_PATH or build via scripts/build-binary.sh)",
+        "apm binary not found (set APM_BINARY_PATH, install on PATH, or build via scripts/build-binary.sh)",
     ),
     "requires_runtime_codex": (
         lambda: _has_runtime("codex"),
@@ -125,49 +185,62 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     The skip decision is made once at collection time, so ``-v`` output shows
     the test as ``SKIPPED`` with a clear reason, exactly mirroring the prior
     ``pytestmark = pytest.mark.skipif(...)`` behavior.
+
+    Check functions are memoized (``lru_cache``) so each precondition is
+    evaluated at most once per session, regardless of how many tests carry
+    the marker. We also short-circuit per item once the first failing
+    precondition fires, to avoid evaluating later checks for an item we
+    have already decided to skip.
     """
     for item in items:
         for marker_name, (check_fn, reason) in _MARKER_CHECKS.items():
             if item.get_closest_marker(marker_name) and not check_fn():
                 item.add_marker(pytest.mark.skip(reason=reason))
+                break
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session")
 def apm_binary_path() -> Path:
-    """Resolve the apm binary path for tests that need to shell out to it.
+    """Resolve the apm binary path for tests that shell out to it.
 
-    Resolution order:
-      1. ``APM_BINARY_PATH`` env var (CI sets this after the build step).
-      2. ``shutil.which("apm")`` lookup on ``PATH``.
-      3. ``./dist/<platform>/apm`` (local build convention).
-
-    Skips the test if no binary is found, with a message pointing at the
-    build script.
+    Uses the same resolution chain as the ``requires_apm_binary`` marker
+    (see ``_resolve_apm_binary``). Skips the test if no binary is found.
     """
-    env_path = os.environ.get("APM_BINARY_PATH")
-    if env_path:
-        candidate = Path(env_path)
-        if candidate.is_file():
-            return candidate.resolve()
+    resolved = _resolve_apm_binary()
+    if resolved is None:
+        pytest.skip(
+            "No apm binary found "
+            "(set APM_BINARY_PATH, install on PATH, or build via scripts/build-binary.sh)"
+        )
+    return resolved  # type: ignore[return-value]
 
-    on_path = shutil.which("apm")
-    if on_path:
-        return Path(on_path).resolve()
 
-    import platform as plat
+# ---------------------------------------------------------------------------
+# Shared helpers (carried in from main #1154)
+# ---------------------------------------------------------------------------
 
-    os_name = plat.system().lower()
-    arch = plat.machine().lower()
-    arch_map = {
-        "x86_64": "x86_64",
-        "amd64": "x86_64",
-        "arm64": "arm64",
-        "aarch64": "arm64",
-    }
-    binary_name = f"apm-{os_name}-{arch_map.get(arch, arch)}"
-    local_path = Path("dist") / binary_name / "apm"
-    if local_path.is_file():
-        return local_path.resolve()
 
-    pytest.skip("No apm binary found (set APM_BINARY_PATH or build via scripts/build-binary.sh)")
-    raise RuntimeError("unreachable")  # for type-checker
+def make_copilot_project(tmp_path: Path, name: str = "test-project") -> Path:
+    """Create a temp project with a valid copilot signal.
+
+    Materializes ``<tmp_path>/<name>/.github/copilot-instructions.md`` so
+    auto-detection resolves to the copilot target without ambiguity.
+
+    Args:
+        tmp_path: pytest ``tmp_path`` fixture.
+        name: Project directory name (default ``"test-project"``).
+
+    Returns:
+        The created project root.
+    """
+    project = tmp_path / name
+    project.mkdir()
+    github_dir = project / ".github"
+    github_dir.mkdir()
+    (github_dir / "copilot-instructions.md").write_bytes(b"# Copilot instructions\n")
+    return project

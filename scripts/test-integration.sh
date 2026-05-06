@@ -417,6 +417,20 @@ run_e2e_tests() {
         exit 1
     fi
 
+    # Target resolution overhaul E2E (#1154 + 10 sister issues).
+    # Offline tests: exercises detection whitelist, resolution priority,
+    # provenance line, error renderer, dry-run, apm targets command.
+    # NO GitHub token required (uses local bundles).
+    log_info "Running #1154 target resolution E2E..."
+    echo "Command: pytest tests/integration/test_target_resolution_e2e.py -v -s --tb=short -m integration"
+
+    if pytest tests/integration/test_target_resolution_e2e.py -v -s --tb=short -m integration; then
+        log_success "#1154 target resolution E2E passed!"
+    else
+        log_error "#1154 target resolution E2E failed!"
+        exit 1
+    fi
+
     # apm deps update CLI E2E -- defends the explicit update workflow
     # (lockfile bump across all packages, selective package update,
     # global-scope update, unknown-package error).
@@ -513,6 +527,18 @@ run_e2e_tests() {
         log_success "Agent-skills target E2E tests passed!"
     else
         log_error "Agent-skills target E2E tests failed!"
+        exit 1
+    fi
+
+    # Run skill install E2E tests -- requires GITHUB_APM_PAT (pytestmark skips otherwise).
+    # Guards skill install idempotency and .apm-pin no-leak invariant on reinstall.
+    log_info "Running skill install E2E tests..."
+    echo "Command: pytest tests/integration/test_skill_install.py -v -s --tb=short"
+
+    if pytest tests/integration/test_skill_install.py -v -s --tb=short; then
+        log_success "Skill install E2E tests passed!"
+    else
+        log_error "Skill install E2E tests failed!"
         exit 1
     fi
 

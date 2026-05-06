@@ -34,34 +34,15 @@ import pytest
 import yaml
 
 # ---------------------------------------------------------------------------
-# Module-level skip conditions
+# Module-level skip routing
 # ---------------------------------------------------------------------------
+#
+# The ``requires_ado_bearer`` marker (registered in conftest.py) probes for
+# `az` + a working bearer token at collection time and auto-skips when the
+# preconditions are not met. We only keep ``_AZ_BIN`` here because individual
+# tests reference it when re-shelling out to `az`.
 
 _AZ_BIN = shutil.which("az")
-_AZ_AVAILABLE = _AZ_BIN is not None
-_BEARER_REACHABLE = False
-
-if _AZ_AVAILABLE and os.getenv("APM_TEST_ADO_BEARER") == "1":
-    try:
-        _probe = subprocess.run(
-            [
-                _AZ_BIN,
-                "account",
-                "get-access-token",
-                "--resource",
-                "499b84ac-1321-427f-aa17-267ca6975798",
-                "--query",
-                "accessToken",
-                "-o",
-                "tsv",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        _BEARER_REACHABLE = _probe.returncode == 0 and _probe.stdout.startswith("eyJ")
-    except Exception:
-        _BEARER_REACHABLE = False
 
 pytestmark = pytest.mark.requires_ado_bearer
 

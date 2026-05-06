@@ -7,17 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Explicit, auditable target resolution.** `apm install` and `apm compile` now resolve harness targets in a strict priority chain (`--target` flag > `apm.yml` `targets:` > auto-detect from filesystem signals) and print a one-line `[i] Targets: ...  (source: ...)` provenance summary so the chosen path is never silently inferred. Empty repositories with no signal now exit 2 with a teaching message instead of silently defaulting to `copilot`. Adds `apm targets` discovery command and `apm compile --all` flag (deprecates `--target all`). (#1165, closes #1154, closes #1122, closes #1130, closes #518, closes #888, closes #891, closes #650, closes #1056)
+- **`apm init` target-selection prompt.** Interactive init now presents a numbered-toggle checklist pre-seeded from filesystem signals (or the existing `target:` on re-init) so users land in Tier 2 (`apm.yml target:`) by default. New `--target` flag for scripted use. (#1165)
+- **`apm install` now honours `policy.fetch_failure_default: block` for `no_git_remote` / `absent` / `empty`** -- install-side parity with the audit fix above; default `warn` keeps fail-open. (#1159)
+- Centralize integration-test skip preconditions in `tests/integration/conftest.py` via `requires_*` markers; replaces the per-file `pytestmark = pytest.mark.skipif(...)` chains with a single `pytest_collection_modifyitems` hook so adding a new precondition is one entry in `_MARKER_CHECKS`. (#1167)
+
 ### Fixed
 
 - **`apm audit --ci` no longer silently skips when no org policy is resolved** -- `no_git_remote` / `absent` / `empty` auto-discovery outcomes now emit a `[!]` warning to stderr by default and honour `policy.fetch_failure_default: block` to fail closed (exit 1); JSON/SARIF on stdout stays clean. (#1159)
 - **SCP-shorthand SSH URLs from non-`git` users now parse correctly** -- `<user>@github.com:owner/repo` (EMU) and `<user>@ssh.dev.azure.com:v3/<org>/<project>/<repo>` (ADO) are accepted by both dependency parsing and policy auto-discovery. (#1159)
 - Fix `apm install` against a branch ref so it re-downloads when upstream has advanced past the lockfile-recorded SHA, and self-heal lockfiles produced by APM <= 0.12.2 on next install. (#1158)
 - Rewrite in-package relative markdown links to their `apm_modules/` location at install time so sibling references survive the `.agents/.github` deploy split. (#1147)
-
-### Changed
-
-- **Integration tests now use marker-driven discovery instead of per-file enumeration in `scripts/test-integration.sh`.** Replaced 21 `pytestmark = pytest.mark.skipif(...)` chains across `tests/integration/` with declarative `requires_*` markers; the precondition logic lives once in `tests/integration/conftest.py` and auto-skips at collection time. Eliminates silent test loss when a new file is added but the bash script is not updated. PR1 of #1166. (#1167)
-- **`apm install` now honours `policy.fetch_failure_default: block` for `no_git_remote` / `absent` / `empty`** -- install-side parity with the audit fix above; default `warn` keeps fail-open. (#1159)
+- `.apm-pin` cache marker no longer leaks into skill deploy targets on subsequent installs. (#1153)
 
 ## [0.12.2] - 2026-05-05
 
