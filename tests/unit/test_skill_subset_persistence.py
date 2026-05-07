@@ -257,10 +257,9 @@ class TestApmYmlWriter:
         result = set_skill_subset_for_entry(manifest, "owner/repo", ["alpha"])
         assert result is False
 
-    def test_flat_list_deps_normalised(self, tmp_path):
-        """Flat list dependencies don't crash the writer."""
+    def test_flat_list_deps_rejected(self, tmp_path):
+        """Flat list dependencies raise ValueError in the writer."""
         from apm_cli.commands._apm_yml_writer import set_skill_subset_for_entry
-        from apm_cli.utils.yaml_io import load_yaml
 
         manifest = self._write_manifest(
             tmp_path,
@@ -269,14 +268,8 @@ class TestApmYmlWriter:
               - owner/repo#main
             """,
         )
-        result = set_skill_subset_for_entry(manifest, "owner/repo", ["alpha"])
-        assert result is True
-        data = load_yaml(manifest)
-        # Writer should have normalised the flat list to structured form
-        assert isinstance(data["dependencies"], dict)
-        entry = data["dependencies"]["apm"][0]
-        assert isinstance(entry, dict)
-        assert entry["skills"] == ["alpha"]
+        with pytest.raises(ValueError, match=r"expected a mapping.*got a plain list"):
+            set_skill_subset_for_entry(manifest, "owner/repo", ["alpha"])
 
     def test_update_existing_dict_entry(self, tmp_path):
         """Dict entry with existing skills: gets updated."""

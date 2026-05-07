@@ -6,8 +6,6 @@ Dependency and validation types have been extracted to sibling modules
 compatibility.
 """
 
-import logging
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Union  # noqa: F401, UP035
@@ -31,8 +29,6 @@ from .validation import (
     ValidationResult,
     validate_apm_package,
 )
-
-_logger = logging.getLogger(__name__)
 
 # Re-export all moved symbols so `from apm_cli.models.apm_package import X` keeps working
 __all__ = [  # noqa: RUF022
@@ -209,20 +205,14 @@ class APMPackage:
         raw_deps = data.get("dependencies")
         if raw_deps is not None:
             if isinstance(raw_deps, list):
-                # Flat list format: normalise to {"apm": [...]} so
-                # transitive resolution works. The structured form
-                # (dependencies.apm:) is canonical; warn authors.
-                warnings.warn(
-                    f"Flat dependency list in {apm_yml_path} is deprecated. "
-                    "Use 'dependencies:\\n  apm:\\n  - ...' instead.",
-                    DeprecationWarning,
-                    stacklevel=2,
+                raise ValueError(
+                    f"Invalid 'dependencies' in {apm_yml_path}: expected a mapping "
+                    "with 'apm:' and/or 'mcp:' keys, got a plain list. "
+                    "Use the structured format:\n"
+                    "  dependencies:\n"
+                    "    apm:\n"
+                    "      - owner/repo"
                 )
-                _logger.debug(
-                    "Normalising flat dependency list in %s to structured format",
-                    apm_yml_path,
-                )
-                raw_deps = {"apm": raw_deps}
             if isinstance(raw_deps, dict):
                 dependencies = cls._parse_dependency_dict(raw_deps, label="")
 
@@ -231,17 +221,14 @@ class APMPackage:
         raw_dev_deps = data.get("devDependencies")
         if raw_dev_deps is not None:
             if isinstance(raw_dev_deps, list):
-                warnings.warn(
-                    f"Flat devDependencies list in {apm_yml_path} is deprecated. "
-                    "Use 'devDependencies:\\n  apm:\\n  - ...' instead.",
-                    DeprecationWarning,
-                    stacklevel=2,
+                raise ValueError(
+                    f"Invalid 'devDependencies' in {apm_yml_path}: expected a mapping "
+                    "with 'apm:' and/or 'mcp:' keys, got a plain list. "
+                    "Use the structured format:\n"
+                    "  devDependencies:\n"
+                    "    apm:\n"
+                    "      - owner/repo"
                 )
-                _logger.debug(
-                    "Normalising flat devDependencies list in %s to structured format",
-                    apm_yml_path,
-                )
-                raw_dev_deps = {"apm": raw_dev_deps}
             if isinstance(raw_dev_deps, dict):
                 dev_dependencies = cls._parse_dependency_dict(raw_dev_deps, label="dev ")
 

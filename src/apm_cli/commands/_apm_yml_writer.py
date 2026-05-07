@@ -26,10 +26,12 @@ def set_skill_subset_for_entry(
     """
     data = load_yaml(manifest_path) or {}
     deps_section = data.get("dependencies", {})
-    # Normalise flat list format to structured dict so .get("apm")
-    # does not raise AttributeError on a list object.
+    # Reject flat list format -- the structured form is required.
     if isinstance(deps_section, list):
-        deps_section = {"apm": deps_section}
+        raise ValueError(
+            f"Invalid 'dependencies' in {manifest_path}: expected a mapping "
+            "with 'apm:' key, got a plain list."
+        )
     apm_deps = deps_section.get("apm", [])
     if not apm_deps:
         return False
