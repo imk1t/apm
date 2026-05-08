@@ -37,6 +37,8 @@ apm init [PROJECT_NAME] [OPTIONS]
 - `-y, --yes` - Skip interactive prompts and use auto-detected defaults
 - `--plugin` - Initialize as a plugin authoring project (creates `plugin.json` + `apm.yml` with `devDependencies`)
 - `--marketplace` - Seed `apm.yml` with a `marketplace:` authoring block. See the [Authoring a marketplace guide](../../guides/marketplace-authoring/).
+- `--target TARGET` - Comma-separated target list (skip prompt, write directly to `apm.yml`)
+- `-v, --verbose` - Show detailed output
 
 **Examples:**
 ```bash
@@ -671,7 +673,7 @@ apm pack [OPTIONS]
 
 **Options:**
 - `-o, --output PATH` - Bundle output directory (default: `./build`). Does not affect `marketplace.json` path.
-- `-t, --target [copilot|vscode|claude|cursor|codex|opencode|gemini|windsurf|all]` - Filter bundle files by target. Accepts comma-separated values (e.g., `-t claude,copilot`). Auto-detects from `apm.yml` if omitted. `vscode` is an alias for `copilot`. No-op for marketplace output.
+- `-t, --target [copilot|claude|cursor|codex|opencode|gemini|windsurf|agent-skills|all]` - Filter bundle files by target. Accepts comma-separated values (e.g., `-t claude,copilot`). Auto-detects from `apm.yml` if omitted. `vscode` and `agents` are deprecated aliases (still accepted; prefer `copilot` or `agent-skills`). No-op for marketplace output.
 - `--archive` - Produce a `.tar.gz` archive instead of a directory. Bundle only.
 - `--format [plugin|apm]` - Bundle format (default: `plugin`). `plugin` emits a Claude Code plugin directory with a schema-conformant `plugin.json` ([official schema](https://json.schemastore.org/claude-code-plugin.json)). `apm` produces the legacy APM bundle layout (consumed by `microsoft/apm-action@v1` restore mode and other bundle-aware tooling). No-op for marketplace output.
 - `--force` - On collision (plugin format), last writer wins instead of first. Bundle only.
@@ -724,18 +726,20 @@ apm pack --marketplace-output ./build/marketplace.json
 
 | Target | Includes paths starting with |
 |--------|------------------------------|
-| `vscode` | `.github/` |
+| `copilot` | `.github/` |
 | `claude` | `.claude/` |
 | `cursor` | `.cursor/` |
 | `opencode` | `.opencode/` |
 | `gemini` | `.gemini/` |
+| `windsurf` | `.windsurf/` |
+| `agent-skills` | `.agents/` |
 | `all` | all of the above |
 
 **Enriched lockfile example:**
 ```yaml
 pack:
   format: apm
-  target: vscode
+  target: copilot
   packed_at: '2026-03-09T12:00:00+00:00'
 lockfile_version: '1'
 generated_at: ...
@@ -826,7 +830,7 @@ apm update
 APM automatically checks for updates (at most once per day) when running any command. If a newer version is available, you'll see a yellow warning:
 
 ```
-⚠️  A new version of APM is available: 0.7.0 (current: 0.6.3)
+[!]  A new version of APM is available: 0.7.0 (current: 0.6.3)
 Run apm update to upgrade
 ```
 
@@ -998,13 +1002,19 @@ another package:
 Display dependencies in hierarchical tree format with primitive counts.
 
 ```bash
-apm deps tree  
+apm deps tree [OPTIONS]
 ```
+
+**Options:**
+- `-g, --global` - Show user-scope dependency tree (`~/.apm/`)
 
 **Examples:**
 ```bash
 # Show dependency tree
 apm deps tree
+
+# Show user-scope dependency tree
+apm deps tree --global
 ```
 
 **Sample Output:**

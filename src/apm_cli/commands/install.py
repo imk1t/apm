@@ -799,7 +799,7 @@ def _handle_mcp_install(
 @click.option(
     "--runtime",
     help=(
-        "Target specific runtime only (copilot, codex, vscode, cursor, opencode, gemini, claude)"
+        "Target specific runtime only (copilot, codex, vscode, cursor, opencode, gemini, claude, windsurf)"
     ),
 )
 @click.option("--exclude", help="Exclude specific runtime from installation")
