@@ -883,6 +883,20 @@ class TestInstallLocalBundleIssue1207:
                     f"plugin.json leaked into {rel_to_project}"
                 )
 
+        # D2.b: compile-only targets must surface the compile hint so
+        # users know to run ``apm compile`` to merge staged instructions.
+        if consumer_target in {"opencode", "codex", "gemini"}:
+            # CLI logger may line-wrap; collapse whitespace before
+            # substring checks so the assertion survives terminal width
+            # changes without coupling to render details.
+            collapsed = " ".join(result.output.split())
+            assert "apm compile" in collapsed, (
+                f"compile hint missing for target={consumer_target}: {result.output!r}"
+            )
+            assert consumer_target in collapsed, (
+                f"compile hint should name target={consumer_target}: {result.output!r}"
+            )
+
     def test_multi_target_consumer_deploys_to_both(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

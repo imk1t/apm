@@ -502,9 +502,12 @@ def integrate_local_bundle(
             if not fp.is_file() or fp.is_symlink():
                 continue
             rel = fp.relative_to(bundle_dir).as_posix()
-            # Issue #1207 D2.a: case-insensitive ``plugin.json`` skip --
-            # bundle metadata must never deploy to consumer projects.
-            if rel == "apm.lock.yaml" or rel.lower() == "plugin.json":
+            # Issue #1207 D2.a: case-insensitive ``plugin.json`` and
+            # ``.mcp.json`` skip -- bundle metadata must never deploy to
+            # consumer projects.  Match the deploy-loop semantics so
+            # case-folding filesystems do not let a renamed file slip
+            # into pack_files unnecessarily.
+            if rel == "apm.lock.yaml" or rel.lower() == "plugin.json" or rel.lower() == ".mcp.json":
                 continue
             pack_files[rel] = hashlib.sha256(fp.read_bytes()).hexdigest()
 
@@ -554,8 +557,10 @@ def integrate_local_bundle(
                 continue
             # Issue #1207 D2: ``.mcp.json`` is wired via ``MCPIntegrator``
             # in ``local_bundle_handler`` after this loop, not deployed as
-            # a flat file under the target's root_dir.
-            if rel == ".mcp.json":
+            # a flat file under the target's root_dir.  Match
+            # case-insensitively so case-folding filesystems (HFS+, NTFS)
+            # do not let a bundle ship ``.MCP.json`` past the skip.
+            if rel.lower() == ".mcp.json":
                 skipped += 1
                 continue
             # CR1: bundle_files keys come from untrusted lockfile YAML

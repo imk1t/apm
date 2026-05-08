@@ -164,6 +164,45 @@ class TestPluginJsonNeverDeployed:
 
 
 # ---------------------------------------------------------------------------
+# D2: .mcp.json never deployed as a flat file
+# ---------------------------------------------------------------------------
+
+
+class TestMcpJsonNeverDeployed:
+    @pytest.mark.parametrize("name", [".mcp.json", ".MCP.json", ".Mcp.Json"])
+    def test_mcp_json_skipped_regardless_of_case(self, tmp_path: Path, name: str) -> None:
+        # ``.mcp.json`` is wired via ``MCPIntegrator`` after the deploy
+        # loop; it must never land as a flat file under the consumer's
+        # target root.  Case-folding filesystems (HFS+, NTFS) make a
+        # case-sensitive skip exploitable.
+        bundle = _build_bundle(
+            tmp_path,
+            files={"agents/coder.md": "# Coder\n", name: '{"mcpServers": {}}'},
+        )
+        project = tmp_path / "project"
+        project.mkdir()
+        bi = _bundle_info(bundle)
+        target = KNOWN_TARGETS["copilot"]
+
+        result = integrate_local_bundle(
+            bi,
+            project,
+            targets=[target],
+            force=False,
+            dry_run=False,
+            diagnostics=None,
+            logger=None,
+            scope=None,
+            alias=None,
+        )
+
+        for f in result["deployed_files"]:
+            assert Path(f).name.lower() != ".mcp.json", f".mcp.json deployed as flat file to {f}"
+        for child in (project / target.root_dir).rglob("*"):
+            assert child.name.lower() != ".mcp.json", f".mcp.json materialised at {child}"
+
+
+# ---------------------------------------------------------------------------
 # D2.b: instructions staged for compile-only targets
 # ---------------------------------------------------------------------------
 

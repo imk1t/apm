@@ -139,8 +139,10 @@ def install_local_bundle(
         staged_instructions = [
             f
             for f in deployed
-            if "/apm_modules/" in f.replace("\\", "/")
-            or (f.startswith("apm_modules/") and "/.apm/instructions/" in f.replace("\\", "/"))
+            if (
+                f.replace("\\", "/").startswith("apm_modules/")
+                and "/.apm/instructions/" in f.replace("\\", "/")
+            )
         ]
         # Issue #1207 D2.c: bundle-level ``.mcp.json`` is recognized but not
         # auto-wired in this release.  Surface a notice so users know to
@@ -151,10 +153,14 @@ def install_local_bundle(
             pack = bundle_info.lockfile.get("pack") or {}
             bf = pack.get("bundle_files") or {}
             if isinstance(bf, dict):
-                bundle_mcp_present = any(str(k) == ".mcp.json" for k in bf)
+                bundle_mcp_present = any(str(k).lower() == ".mcp.json" for k in bf)
         # Fallback: walk bundle source dir if lockfile manifest is absent.
         if not bundle_mcp_present and bundle_info.source_dir is not None:
-            bundle_mcp_present = (bundle_info.source_dir / ".mcp.json").is_file()
+            bundle_mcp_present = any(
+                p.name.lower() == ".mcp.json"
+                for p in bundle_info.source_dir.iterdir()
+                if p.is_file()
+            )
 
         if dry_run:
             logger.dry_run_notice(f"Would deploy {len(deployed)} file(s) from local bundle")
@@ -244,10 +250,12 @@ def install_local_bundle(
 
         # Issue #1207 D2.b: post-install compile hint for staged instructions.
         if staged_instructions and not dry_run:
+            target_names = ", ".join(sorted({t.name for t in targets}))
             logger.warning(
-                "Bundle includes instructions that were staged for compile. "
-                "Run 'apm compile' to merge them into your target's "
-                "AGENTS.md / GEMINI.md / equivalent."
+                f"Bundle staged {len(staged_instructions)} instruction(s) "
+                f"for compile (target: {target_names}). Run 'apm compile' "
+                "to merge them into AGENTS.md / GEMINI.md / equivalent. "
+                "See https://microsoft.github.io/apm/guides/compilation/."
             )
 
         # Issue #1207 D2.c: surface bundle MCP presence so users know it

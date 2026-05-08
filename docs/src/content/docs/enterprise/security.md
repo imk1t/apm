@@ -190,10 +190,19 @@ APM deploys files only to controlled subdirectories within the project root.
 All deploy paths are validated before any file operation:
 
 1. **No `..` segments.** Any path containing `..` is rejected outright.
-2. **Allowed prefixes only.** Paths must start with an allowed prefix (`.github/`, `.claude/`, `.cursor/`, or `.opencode/`).
+2. **Allowed prefixes only.** Paths must start with an allowed prefix (`.github/`, `.claude/`, `.cursor/`, `.opencode/`, `.codex/`, `.gemini/`, `.windsurf/`, `.agents/`, or `apm_modules/`). The `apm_modules/<slug>/` prefix carries staged instructions for compile-only targets (opencode, codex, gemini) and is constrained by `<slug>` validation: only `[A-Za-z0-9._-]` characters are accepted, with leading/trailing dots, double dots, and reserved names rejected.
 3. **Resolution containment.** The fully resolved path must remain within the project root directory.
 
 A path must pass all three checks. Failure on any check prevents the file from being written.
+
+### Local bundle install trust model
+
+`apm install <bundle>` accepts a directory or `.tar.gz` produced by `apm pack`. Bundles are imperative (no policy / dependency-resolver / network) and target-agnostic; the consumer's project drives where files land. Trust boundaries:
+
+1. **`bundle_files` keys are untrusted.** They come from the bundle's own `apm.lock.yaml` and are validated for traversal sequences before any filesystem path is constructed; resolved destinations must remain within the deploy root. Unsafe entries are skipped with a warning.
+2. **`plugin.json` is bundle metadata, never deployed.** It is recognized case-insensitively and skipped in both the manifest-driven deploy loop and the lockfile-less fallback walk so case-folding filesystems (HFS+, NTFS) cannot smuggle a renamed file past the skip.
+3. **`.mcp.json` is wired through `MCPIntegrator`, never deployed as a flat file.** Same case-insensitive skip semantics as `plugin.json`.
+4. **Slug validation.** The bundle's `id` (used as `<slug>` for staged instructions and the install label) is rejected if it contains traversal sequences or characters outside `[A-Za-z0-9._-]`.
 
 ### Symlink handling
 

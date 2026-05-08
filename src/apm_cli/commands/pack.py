@@ -219,6 +219,11 @@ def _render_bundle_result(logger, pack_result, fmt, target, dry_run):
                 "plugin-native directories (agents/, skills/, commands/, ...). "
                 "No APM-specific files included."
             )
+        # Issue #1207: target-agnostic bundles install into any consumer
+        # project.  Print a copy-pasteable share line so packing creates
+        # the social hand-off naturally.
+        if pack_result.bundle_path:
+            logger.info(f"Share with: apm install {pack_result.bundle_path}")
 
 
 def _render_marketplace_result(logger, report, dry_run, extra_warnings=None):
