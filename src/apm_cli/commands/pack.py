@@ -135,11 +135,27 @@ def pack_cmd(
     """Pack APM artifacts: bundle and/or marketplace.json."""
     logger = CommandLogger("pack", verbose=verbose, dry_run=dry_run)
     project_root = Path(".").resolve()
+    # Issue #1207 D1: when --target is not given, detect the project's
+    # actual target so the embedded ``pack.target`` reflects what was
+    # tested rather than a hardcoded "copilot".  ``pack.target`` is now
+    # informational metadata only -- consumer-side install resolves the
+    # deploy target from the consumer project's context, not from the
+    # bundle.
+    if target is None:
+        from ..core.target_detection import detect_target
+
+        try:
+            detected, _reason = detect_target(project_root)
+            effective_target = detected if detected else None
+        except Exception:
+            effective_target = None
+    else:
+        effective_target = target
     options = BuildOptions(
         project_root=project_root,
         apm_yml_path=project_root / "apm.yml",
         bundle_format=fmt,
-        bundle_target=target,
+        bundle_target=effective_target,
         bundle_archive=archive,
         bundle_output=Path(output),
         bundle_force=force,

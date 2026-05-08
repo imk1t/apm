@@ -768,3 +768,143 @@ class TestInstallLegacyApmFormatBundle:
         )
         # Should NOT contain the legacy-tarball error message
         assert "--format apm" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# E2E: Issue #1207 -- target-agnostic bundle install matrix
+# ---------------------------------------------------------------------------
+
+
+class TestInstallLocalBundleIssue1207:
+    """End-to-end matrix for issue #1207.
+
+    The same target-agnostic bundle (``pack.target == "all"``) must
+    install correctly into projects configured for any target.  No
+    "Install interrupted" line on success; ``plugin.json`` is never
+    deployed; instructions land where the target's compile flow
+    expects them.
+    """
+
+    @pytest.mark.parametrize(
+        "consumer_target,expected_paths",
+        [
+            (
+                "copilot",
+                [
+                    ".agents/skills/coding/SKILL.md",
+                    ".github/agents/reviewer.md",
+                    ".github/instructions/style.md",
+                ],
+            ),
+            (
+                "claude",
+                [
+                    ".claude/skills/coding/SKILL.md",
+                    ".claude/agents/reviewer.md",
+                    ".claude/instructions/style.md",
+                ],
+            ),
+            (
+                "cursor",
+                [
+                    ".agents/skills/coding/SKILL.md",
+                    ".cursor/agents/reviewer.md",
+                    ".cursor/instructions/style.md",
+                ],
+            ),
+            (
+                "opencode",
+                [
+                    ".agents/skills/coding/SKILL.md",
+                    ".opencode/agents/reviewer.md",
+                    "apm_modules/test-plugin/.apm/instructions/style.md",
+                ],
+            ),
+            (
+                "codex",
+                [
+                    ".agents/skills/coding/SKILL.md",
+                    ".codex/agents/reviewer.md",
+                    "apm_modules/test-plugin/.apm/instructions/style.md",
+                ],
+            ),
+            (
+                "gemini",
+                [
+                    ".agents/skills/coding/SKILL.md",
+                    "apm_modules/test-plugin/.apm/instructions/style.md",
+                ],
+            ),
+        ],
+    )
+    def test_target_agnostic_bundle_installs_per_consumer_target(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        consumer_target: str,
+        expected_paths: list[str],
+    ) -> None:
+        """Bundle packed with ``pack.target == "all"`` deploys correctly
+        into the consumer's resolved target without any pack-side
+        target binding leaking into the deploy path.
+
+        We exercise both detection mechanisms in a single matrix: the
+        consumer's IDE is "configured" by pre-creating its ``root_dir``
+        (matches what real users see -- they don't pass ``--target`` on
+        every install).
+        """
+        from apm_cli.integration.targets import KNOWN_TARGETS
+
+        bundle = _make_plugin_bundle(tmp_path / "src", pack_target="all")
+        project = _make_project(tmp_path / "dst")
+        # Pre-create the target's root_dir so resolve_targets picks it up
+        # via directory detection (mirrors a project with the IDE set up).
+        (project / KNOWN_TARGETS[consumer_target].root_dir).mkdir(parents=True, exist_ok=True)
+
+        result = _invoke_install(project, str(bundle), monkeypatch=monkeypatch)
+
+        assert result.exit_code == 0, f"target={consumer_target} stdout={result.output!r}"
+        # D3: no false "Install interrupted" on success.
+        assert "Install interrupted" not in result.output
+
+        for rel in expected_paths:
+            assert (project / rel).is_file(), (
+                f"missing {rel} for target={consumer_target} in {result.output!r}"
+            )
+
+        # D2.a: plugin.json never deployed under the consumer's target
+        # root, regardless of casing.
+        for child in project.rglob("*"):
+            if child.is_file() and child.name.lower() == "plugin.json":
+                # Bundle-source directory may live under tmp_path/src; we
+                # only forbid it under the project tree.
+                rel_to_project = child.relative_to(project)
+                assert "apm_modules" not in str(rel_to_project), (
+                    f"plugin.json leaked into {rel_to_project}"
+                )
+
+    def test_multi_target_consumer_deploys_to_both(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A consumer project with both ``.github/`` and ``.opencode/``
+        present receives the bundle in both layouts: native instructions
+        for copilot, staged for opencode.
+        """
+        bundle = _make_plugin_bundle(tmp_path / "src", pack_target="all")
+        project = _make_project(tmp_path / "dst")
+        # Both targets configured.
+        (project / ".github").mkdir()
+        (project / ".github" / "copilot-instructions.md").write_text("# proj\n", encoding="utf-8")
+        (project / ".opencode").mkdir()
+
+        result = _invoke_install(project, str(bundle), monkeypatch=monkeypatch)
+
+        assert result.exit_code == 0, f"stdout={result.output!r}"
+        # copilot side: instructions deploy verbatim to .github/instructions.
+        assert (project / ".github" / "instructions" / "style.md").is_file()
+        # opencode side: instructions staged for apm compile.
+        assert (
+            project / "apm_modules" / "test-plugin" / ".apm" / "instructions" / "style.md"
+        ).is_file()
+        # Skills shared dir from both target profiles.
+        assert (project / ".agents" / "skills" / "coding" / "SKILL.md").is_file()

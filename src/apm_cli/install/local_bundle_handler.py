@@ -130,6 +130,32 @@ def install_local_bundle(
         deployed_hashes = result.get("deployed_file_hashes", {})
         skipped = result.get("skipped", 0)
 
+        # Issue #1207 D2.b: surface a compile hint when any instruction was
+        # staged into ``apm_modules/<slug>/.apm/instructions/`` because the
+        # resolved target lacks a native ``instructions`` primitive
+        # (opencode, codex, gemini).  Without this, users would see files
+        # under ``apm_modules/`` and wonder why they aren't visible to
+        # their AGENTS.md / GEMINI.md.
+        staged_instructions = [
+            f
+            for f in deployed
+            if "/apm_modules/" in f.replace("\\", "/")
+            or (f.startswith("apm_modules/") and "/.apm/instructions/" in f.replace("\\", "/"))
+        ]
+        # Issue #1207 D2.c: bundle-level ``.mcp.json`` is recognized but not
+        # auto-wired in this release.  Surface a notice so users know to
+        # configure it explicitly.  Full bundle MCP wiring is tracked
+        # separately and will route through ``MCPIntegrator.install``.
+        bundle_mcp_present = False
+        if bundle_info.lockfile:
+            pack = bundle_info.lockfile.get("pack") or {}
+            bf = pack.get("bundle_files") or {}
+            if isinstance(bf, dict):
+                bundle_mcp_present = any(str(k) == ".mcp.json" for k in bf)
+        # Fallback: walk bundle source dir if lockfile manifest is absent.
+        if not bundle_mcp_present and bundle_info.source_dir is not None:
+            bundle_mcp_present = (bundle_info.source_dir / ".mcp.json").is_file()
+
         if dry_run:
             logger.dry_run_notice(f"Would deploy {len(deployed)} file(s) from local bundle")
             # IM5: surface the file list in default mode (not just verbose)
@@ -215,6 +241,24 @@ def install_local_bundle(
         if skipped:
             msg += f" ({skipped} skipped)"
         logger.success(msg)
+
+        # Issue #1207 D2.b: post-install compile hint for staged instructions.
+        if staged_instructions and not dry_run:
+            logger.warning(
+                "Bundle includes instructions that were staged for compile. "
+                "Run 'apm compile' to merge them into your target's "
+                "AGENTS.md / GEMINI.md / equivalent."
+            )
+
+        # Issue #1207 D2.c: surface bundle MCP presence so users know it
+        # is recognized but not auto-wired in this release.
+        if bundle_mcp_present and not dry_run:
+            logger.warning(
+                "Bundle includes .mcp.json with MCP server definitions. "
+                "Auto-wiring of bundle MCP servers is not yet supported -- "
+                "copy the entries into your project's apm.yml mcp_dependencies "
+                "and re-run 'apm install' to register them."
+            )
 
     finally:
         # Tarball cleanup (caller-owned per LocalBundleInfo contract).

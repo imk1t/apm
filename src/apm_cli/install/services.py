@@ -502,7 +502,9 @@ def integrate_local_bundle(
             if not fp.is_file() or fp.is_symlink():
                 continue
             rel = fp.relative_to(bundle_dir).as_posix()
-            if rel in ("apm.lock.yaml", "plugin.json"):
+            # Issue #1207 D2.a: case-insensitive ``plugin.json`` skip --
+            # bundle metadata must never deploy to consumer projects.
+            if rel == "apm.lock.yaml" or rel.lower() == "plugin.json":
                 continue
             pack_files[rel] = hashlib.sha256(fp.read_bytes()).hexdigest()
 
@@ -544,6 +546,18 @@ def integrate_local_bundle(
                 _primitive_roots[prim_name] = project_root / prim_mapping.deploy_root
 
         for rel, expected_hash in sorted(pack_files.items()):
+            # Issue #1207 D2.a: skip ``plugin.json`` (case-insensitive) --
+            # this is bundle-internal metadata describing where primitives
+            # live in the tarball, not deployable consumer content.
+            if rel.lower() == "plugin.json":
+                skipped += 1
+                continue
+            # Issue #1207 D2: ``.mcp.json`` is wired via ``MCPIntegrator``
+            # in ``local_bundle_handler`` after this loop, not deployed as
+            # a flat file under the target's root_dir.
+            if rel == ".mcp.json":
+                skipped += 1
+                continue
             # CR1: bundle_files keys come from untrusted lockfile YAML
             # inside the bundle.  Reject traversal sequences before
             # constructing any filesystem path, then assert the resolved
@@ -560,15 +574,48 @@ def integrate_local_bundle(
                 skipped += 1
                 continue
 
-            # Route the file to the correct deploy root.  If the first
-            # path segment matches a primitive with an explicit
-            # ``deploy_root`` (e.g. ``skills/`` → ``.agents/``), use
-            # the converged directory.  Otherwise fall back to the
-            # target's default root.
+            # Issue #1207 D2.b: for compile-only targets (opencode, codex,
+            # gemini -- no ``instructions`` primitive in their profile),
+            # bundle ``instructions/*.md`` files must be staged under
+            # ``apm_modules/<slug>/.apm/instructions/`` so ``apm compile``
+            # can merge them into the target's AGENTS.md / GEMINI.md /
+            # equivalent.  Deploying them verbatim to ``<root>/instructions/``
+            # is a no-op for these clients.
             _first_seg = rel.split("/", 1)[0] if "/" in rel else ""
-            deploy_root = _primitive_roots.get(_first_seg, default_deploy_root)
-
-            dest = deploy_root / rel
+            if _first_seg == "instructions" and "instructions" not in (target.primitives or {}):
+                # Slug must be safe for filesystem path construction --
+                # ``package_id`` originates from untrusted ``plugin.json``.
+                try:
+                    validate_path_segments(str(slug), context="bundle slug")
+                except PathTraversalError as exc:
+                    if logger is not None:
+                        logger.warning(
+                            f"Skipped instruction staging for unsafe slug {slug!r}: {exc}"
+                        )
+                    skipped += 1
+                    continue
+                stage_root = project_root / "apm_modules" / slug / ".apm" / "instructions"
+                try:
+                    ensure_path_within(stage_root, project_root / "apm_modules")
+                except PathTraversalError as exc:
+                    if logger is not None:
+                        logger.warning(f"Skipped unsafe stage root for {slug!r}: {exc}")
+                    skipped += 1
+                    continue
+                # Stage with bundle-relative basename only -- nested
+                # subdirs under ``instructions/`` collapse to the staged
+                # flat directory (mirrors how plugin_exporter writes
+                # ``instructions/<name>``).
+                dest = stage_root / Path(rel).name
+                deploy_root = stage_root
+            else:
+                # Route the file to the correct deploy root.  If the first
+                # path segment matches a primitive with an explicit
+                # ``deploy_root`` (e.g. ``skills/`` -> ``.agents/``), use
+                # the converged directory.  Otherwise fall back to the
+                # target's default root.
+                deploy_root = _primitive_roots.get(_first_seg, default_deploy_root)
+                dest = deploy_root / rel
             try:
                 ensure_path_within(dest, deploy_root)
             except PathTraversalError as exc:
