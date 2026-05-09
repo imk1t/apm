@@ -798,7 +798,7 @@ class CopilotClientAdapter(MCPClientAdapter):
                         name, value, env_overrides=env_overrides
                     )
                 elif value is not None:
-                    resolved[name] = value
+                    resolved[name] = str(value)
             return resolved
 
         import os
